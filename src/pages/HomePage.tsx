@@ -65,7 +65,7 @@ export default function HomePage() {
             {/* Main Content */}
             <main className="flex-1">
                 {/* Carousel Section */}
-                {/* <section className="w-full">
+                <section className="h-max w-full">
                     <Carousel
                         autoPlay
                         infiniteLoop
@@ -104,7 +104,7 @@ export default function HomePage() {
                             </p>
                         </div>
                     </Carousel>
-                </section> */}
+                </section>
 
                 {/* Welcome Section */}
                 <section className="text-center py-16 bg-gradient-to-r from-blue-50 to-blue-100">

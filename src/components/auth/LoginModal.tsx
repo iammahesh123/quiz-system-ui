@@ -38,7 +38,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     console.log('Submitting login form with data:', data); // Debugging log
 
     try {
-      const response = await API.post('/login', data);
+      const response = await API.post('auth/login', data);
       console.log('API response:', response.data); // Debugging log
 
       const { token, role } = response.data;
