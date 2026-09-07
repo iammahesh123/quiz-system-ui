@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { 
-  Chart as ChartJS, 
+import {
+  Chart as ChartJS,
   CategoryScale,
   LinearScale,
   PointElement,
@@ -9,9 +9,11 @@ import {
   Title,
   Tooltip,
   Legend,
-  ArcElement
+  ArcElement,
 } from 'chart.js';
 import { Bar, Line, Pie } from 'react-chartjs-2';
+import { Download, TrendingUp, Users, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Button } from '../../components/ui/Button';
 
 ChartJS.register(
   CategoryScale,
@@ -25,156 +27,217 @@ ChartJS.register(
   ArcElement
 );
 
-const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-
 export default function AdminAnalytics() {
-  const [timeRange, setTimeRange] = useState('6m');
+  const [timeRange, setTimeRange] = useState<'30d' | '3m' | '6m' | '1y'>('6m');
+
+  const rangeDatasets: Record<string, { labels: string[]; quizzes: number[]; attempts: number[]; activeUsers: number[] }> = {
+    '30d': {
+      labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+      quizzes: [12, 18, 14, 22],
+      attempts: [310, 480, 420, 610],
+      activeUsers: [980, 1120, 1250, 1450],
+    },
+    '3m': {
+      labels: ['July', 'August', 'September'],
+      quizzes: [45, 62, 85],
+      attempts: [1200, 2100, 3400],
+      activeUsers: [1200, 1500, 1850],
+    },
+    '6m': {
+      labels: ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'],
+      quizzes: [55, 59, 80, 81, 56, 92],
+      attempts: [1400, 1800, 2400, 2100, 2900, 3850],
+      activeUsers: [1100, 1250, 1450, 1600, 1750, 2150],
+    },
+    '1y': {
+      labels: ['Q1', 'Q2', 'Q3', 'Q4'],
+      quizzes: [180, 240, 310, 380],
+      attempts: [5200, 7100, 8900, 12450],
+      activeUsers: [1400, 1700, 2100, 2345],
+    },
+  };
+
+  const currentData = rangeDatasets[timeRange];
 
   const quizActivityData = {
-    labels: months,
+    labels: currentData.labels,
     datasets: [
       {
-        label: 'Quizzes Created',
-        data: [65, 59, 80, 81, 56, 55],
-        borderColor: 'rgb(75, 192, 192)',
-        backgroundColor: 'rgba(75, 192, 192, 0.5)',
+        label: 'Exams Created',
+        data: currentData.quizzes,
+        backgroundColor: 'rgba(99, 102, 241, 0.85)',
+        borderRadius: 6,
       },
       {
-        label: 'Quiz Attempts',
-        data: [28, 48, 40, 19, 86, 27],
-        borderColor: 'rgb(53, 162, 235)',
-        backgroundColor: 'rgba(53, 162, 235, 0.5)',
+        label: 'Student Attempts (x10)',
+        data: currentData.attempts.map((v) => Math.round(v / 10)),
+        backgroundColor: 'rgba(59, 130, 246, 0.7)',
+        borderRadius: 6,
       },
     ],
   };
 
   const departmentPerformanceData = {
-    labels: ['Computer Science', 'Engineering', 'Mathematics', 'Physics'],
+    labels: ['Computer Science', 'Electrical Eng', 'Mathematics', 'Physics'],
     datasets: [
       {
-        label: 'Average Score',
-        data: [75, 68, 82, 71],
+        label: 'Average Score (%)',
+        data: [78.4, 72.1, 84.5, 76.2],
         backgroundColor: [
-          'rgba(255, 99, 132, 0.5)',
-          'rgba(54, 162, 235, 0.5)',
-          'rgba(255, 206, 86, 0.5)',
-          'rgba(75, 192, 192, 0.5)',
+          'rgba(99, 102, 241, 0.85)',
+          'rgba(14, 165, 233, 0.85)',
+          'rgba(16, 185, 129, 0.85)',
+          'rgba(245, 158, 11, 0.85)',
         ],
-        borderColor: [
-          'rgba(255, 99, 132, 1)',
-          'rgba(54, 162, 235, 1)',
-          'rgba(255, 206, 86, 1)',
-          'rgba(75, 192, 192, 1)',
-        ],
-        borderWidth: 1,
+        borderWidth: 0,
       },
     ],
   };
 
-  const userActivityData = {
-    labels: months,
+  const userGrowthData = {
+    labels: currentData.labels,
     datasets: [
       {
-        label: 'Active Users',
-        data: [1200, 1350, 1450, 1600, 1750, 1900],
-        borderColor: 'rgb(75, 192, 192)',
-        tension: 0.4,
+        label: 'Active Institutional Users',
+        data: currentData.activeUsers,
+        borderColor: '#4f46e5',
+        backgroundColor: 'rgba(79, 70, 229, 0.08)',
+        fill: true,
+        tension: 0.35,
+        pointBackgroundColor: '#4f46e5',
       },
     ],
+  };
+
+  const handleExportAnalytics = () => {
+    const csv =
+      'data:text/csv;charset=utf-8,Period,Quizzes,Attempts,ActiveUsers\n' +
+      currentData.labels
+        .map(
+          (label, i) =>
+            `${label},${currentData.quizzes[i]},${currentData.attempts[i]},${currentData.activeUsers[i]}`
+        )
+        .join('\n');
+    const a = document.createElement('a');
+    a.href = encodeURI(csv);
+    a.download = `analytics_${timeRange}_${Date.now()}.csv`;
+    a.click();
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900">Analytics Dashboard</h1>
-        <select
-          value={timeRange}
-          onChange={(e) => setTimeRange(e.target.value)}
-          className="block w-32 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-        >
-          <option value="7d">Last 7 days</option>
-          <option value="1m">Last month</option>
-          <option value="3m">Last 3 months</option>
-          <option value="6m">Last 6 months</option>
-          <option value="1y">Last year</option>
-        </select>
+      {/* Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Institutional Performance & Analytics</h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Department-level benchmarking, exam completion metrics, and user growth trends.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center rounded-lg border border-slate-300 bg-white p-1 text-xs">
+            {(['30d', '3m', '6m', '1y'] as const).map((range) => (
+              <button
+                key={range}
+                onClick={() => setTimeRange(range)}
+                className={`rounded-md px-3 py-1 font-semibold transition-colors ${
+                  timeRange === range
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {range.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<Download className="h-4 w-4" />}
+            onClick={handleExportAnalytics}
+          >
+            Export CSV
+          </Button>
+        </div>
       </div>
 
+      {/* Analytics KPI Row */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: 'Total Enrolled Candidates', value: '2,345', change: '+14%', icon: Users },
+          { label: 'Overall Completion Rate', value: '91.8%', change: '+3.2%', icon: CheckCircle2 },
+          { label: 'Institutional Mean Score', value: '77.8%', change: '+4.5%', icon: TrendingUp },
+          { label: 'Integrity Compliance Score', value: '99.2%', change: 'Normal', icon: ShieldCheck },
+        ].map((m, idx) => (
+          <div key={idx} className="rounded-xl border border-slate-200 bg-white p-5 shadow-subtle">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 uppercase">{m.label}</span>
+              <m.icon className="h-4 w-4 text-indigo-600" />
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-2xl font-bold text-slate-900 tabular-nums">{m.value}</span>
+              <span className="text-xs font-semibold text-emerald-600">{m.change}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Charts Grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Quiz Activity</h2>
-          <Bar
-            data={quizActivityData}
-            options={{
-              responsive: true,
-              plugins: {
-                legend: {
-                  position: 'top' as const,
-                },
-              },
-            }}
-          />
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-subtle space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="text-sm font-bold text-slate-900">Assessments Created vs Attempts</h3>
+            <span className="text-xs text-slate-500">Period: {timeRange.toUpperCase()}</span>
+          </div>
+          <div className="h-64">
+            <Bar
+              data={quizActivityData}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'top' as const } },
+              }}
+            />
+          </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Department Performance</h2>
-          <Pie
-            data={departmentPerformanceData}
-            options={{
-              responsive: true,
-              plugins: {
-                legend: {
-                  position: 'top' as const,
-                },
-              },
-            }}
-          />
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-subtle space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="text-sm font-bold text-slate-900">Mean Score by Department</h3>
+            <span className="text-xs text-slate-500">Benchmark 75%</span>
+          </div>
+          <div className="h-64 flex items-center justify-center">
+            <Pie
+              data={departmentPerformanceData}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'right' as const } },
+              }}
+            />
+          </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow lg:col-span-2">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">User Activity Trend</h2>
-          <Line
-            data={userActivityData}
-            options={{
-              responsive: true,
-              plugins: {
-                legend: {
-                  position: 'top' as const,
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-subtle space-y-4 lg:col-span-2">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="text-sm font-bold text-slate-900">User Growth & Engagement Trajectory</h3>
+            <span className="text-xs text-slate-500">Total: 2,345 Users</span>
+          </div>
+          <div className="h-72">
+            <Line
+              data={userGrowthData}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                  y: { beginAtZero: false },
                 },
-              },
-              scales: {
-                y: {
-                  beginAtZero: true,
-                },
-              },
-            }}
-          />
-        </div>
-      </div>
-
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-4 py-5 sm:px-6">
-          <h3 className="text-lg font-medium text-gray-900">Key Metrics</h3>
-        </div>
-        <div className="border-t border-gray-200">
-          <dl>
-            <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-              <dt className="text-sm font-medium text-gray-500">Total Users</dt>
-              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">2,345</dd>
-            </div>
-            <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-              <dt className="text-sm font-medium text-gray-500">Active Quizzes</dt>
-              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">45</dd>
-            </div>
-            <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-              <dt className="text-sm font-medium text-gray-500">Average Completion Rate</dt>
-              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">87%</dd>
-            </div>
-            <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-              <dt className="text-sm font-medium text-gray-500">System Uptime</dt>
-              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">99.9%</dd>
-            </div>
-          </dl>
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>
