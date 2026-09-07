@@ -1,183 +1,476 @@
 import { useState } from 'react';
-import { Search, Filter, Download } from 'lucide-react';
+import { Download, Plus, Search, UserCheck, Award, AlertCircle, CheckCircle2, ChevronRight } from 'lucide-react';
+import { DataTable, Column, BulkAction } from '../../components/ui/DataTable';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
+import { Drawer } from '../../components/ui/Drawer';
+import { Modal } from '../../components/ui/Modal';
+import { Input } from '../../components/ui/Input';
 
-const students = [
+interface StudentCohortMember {
+  id: string;
+  name: string;
+  email: string;
+  rollNumber: string;
+  performance: number;
+  letterGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+  attendance: string;
+  quizzesCompleted: number;
+  lastQuizScore: string;
+  status: 'Good Standing' | 'Needs Attention' | 'At Risk';
+}
+
+const initialStudents: StudentCohortMember[] = [
   {
-    id: 1,
-    name: 'Alice Johnson',
-    email: 'alice@example.com',
+    id: 'std-101',
+    name: 'Marcus Chen',
+    email: 'marcus.chen@student.univ.edu',
+    rollNumber: 'CS2024-041',
     performance: 92,
-    attendance: '95%',
-    lastQuiz: '2 days ago',
-    status: 'active',
+    letterGrade: 'A',
+    attendance: '96%',
+    quizzesCompleted: 6,
+    lastQuizScore: '95%',
+    status: 'Good Standing',
   },
   {
-    id: 2,
+    id: 'std-102',
+    name: 'Alice Johnson',
+    email: 'alice.j@student.univ.edu',
+    rollNumber: 'CS2024-012',
+    performance: 88,
+    letterGrade: 'B',
+    attendance: '92%',
+    quizzesCompleted: 6,
+    lastQuizScore: '86%',
+    status: 'Good Standing',
+  },
+  {
+    id: 'std-103',
     name: 'Bob Smith',
-    email: 'bob@example.com',
-    performance: 78,
-    attendance: '85%',
-    lastQuiz: '1 week ago',
-    status: 'warning',
+    email: 'bob.smith@student.univ.edu',
+    rollNumber: 'CS2024-085',
+    performance: 68,
+    letterGrade: 'D',
+    attendance: '78%',
+    quizzesCompleted: 5,
+    lastQuizScore: '62%',
+    status: 'Needs Attention',
   },
   {
-    id: 3,
-    name: 'Charlie Brown',
-    email: 'charlie@example.com',
-    performance: 85,
+    id: 'std-104',
+    name: 'Priya Sharma',
+    email: 'priya.s@student.univ.edu',
+    rollNumber: 'CS2024-033',
+    performance: 95,
+    letterGrade: 'A',
+    attendance: '98%',
+    quizzesCompleted: 6,
+    lastQuizScore: '98%',
+    status: 'Good Standing',
+  },
+  {
+    id: 'std-105',
+    name: 'Kevin Miller',
+    email: 'kevin.m@student.univ.edu',
+    rollNumber: 'CS2024-099',
+    performance: 58,
+    letterGrade: 'F',
+    attendance: '65%',
+    quizzesCompleted: 4,
+    lastQuizScore: '50%',
+    status: 'At Risk',
+  },
+  {
+    id: 'std-106',
+    name: 'Chloe Bennett',
+    email: 'chloe.b@student.univ.edu',
+    rollNumber: 'CS2024-022',
+    performance: 82,
+    letterGrade: 'B',
     attendance: '90%',
-    lastQuiz: '3 days ago',
-    status: 'active',
+    quizzesCompleted: 6,
+    lastQuizScore: '80%',
+    status: 'Good Standing',
   },
 ];
 
 export default function TeacherStudents() {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [students, setStudents] = useState<StudentCohortMember[]>(initialStudents);
+  const [selectedStudent, setSelectedStudent] = useState<StudentCohortMember[] | null>(null);
+  const [inspectedStudent, setInspectedStudent] = useState<StudentCohortMember | null>(null);
+  const [statusFilter, setStatusFilter] = useState('All');
+
+  // Add student modal
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [roll, setRoll] = useState('');
+
+  const filteredStudents = students.filter((s) => {
+    return statusFilter === 'All' || s.status === statusFilter;
+  });
+
+  const handleExportCSV = (listToExport: StudentCohortMember[]) => {
+    const csv =
+      'data:text/csv;charset=utf-8,RollNo,Name,Email,Performance,Grade,Attendance,Status\n' +
+      listToExport
+        .map(
+          (s) =>
+            `${s.rollNumber},"${s.name}",${s.email},${s.performance}%,${s.letterGrade},${s.attendance},${s.status}`
+        )
+        .join('\n');
+    const a = document.createElement('a');
+    a.href = encodeURI(csv);
+    a.download = `cohort_roster_${Date.now()}.csv`;
+    a.click();
+  };
+
+  const handleAddStudent = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !email.trim()) return;
+
+    const created: StudentCohortMember = {
+      id: `std-${Date.now()}`,
+      name: name.trim(),
+      email: email.trim(),
+      rollNumber: roll.trim() || `CS2024-${Math.floor(Math.random() * 900 + 100)}`,
+      performance: 85,
+      letterGrade: 'B',
+      attendance: '100%',
+      quizzesCompleted: 0,
+      lastQuizScore: 'N/A',
+      status: 'Good Standing',
+    };
+
+    setStudents([created, ...students]);
+    setIsAddModalOpen(false);
+    setName('');
+    setEmail('');
+    setRoll('');
+  };
+
+  const columns: Column<StudentCohortMember>[] = [
+    {
+      key: 'name',
+      header: 'Student Candidate',
+      sortable: true,
+      accessor: (s) => (
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-xs font-bold text-slate-700 shrink-0">
+            {s.name
+              .split(' ')
+              .map((n) => n[0])
+              .join('')
+              .slice(0, 2)}
+          </div>
+          <div>
+            <div className="font-semibold text-slate-900 leading-tight">{s.name}</div>
+            <div className="text-xs text-slate-500 mt-0.5">
+              {s.rollNumber} • {s.email}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'performance',
+      header: 'Academic Mastery',
+      sortable: true,
+      accessor: (s) => (
+        <div className="flex items-center gap-2.5">
+          <span
+            className={`font-bold text-xs tabular-nums px-2 py-0.5 rounded-md border ${
+              s.performance >= 85
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : s.performance >= 70
+                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : 'bg-rose-50 text-rose-800 border-rose-200'
+            }`}
+          >
+            Grade {s.letterGrade} ({s.performance}%)
+          </span>
+          <div className="w-20 bg-slate-100 rounded-full h-1.5 hidden sm:block">
+            <div
+              className={`h-1.5 rounded-full ${
+                s.performance >= 85
+                  ? 'bg-emerald-600'
+                  : s.performance >= 70
+                  ? 'bg-amber-600'
+                  : 'bg-rose-600'
+              }`}
+              style={{ width: `${s.performance}%` }}
+            />
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'attendance',
+      header: 'Attendance',
+      sortable: true,
+      accessor: (s) => <span className="text-xs text-slate-700 tabular-nums">{s.attendance}</span>,
+    },
+    {
+      key: 'quizzesCompleted',
+      header: 'Assessments',
+      accessor: (s) => (
+        <span className="text-xs text-slate-700 tabular-nums">
+          {s.quizzesCompleted} / 6 Taken
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Standing',
+      sortable: true,
+      accessor: (s) => (
+        <Badge
+          variant={
+            s.status === 'Good Standing'
+              ? 'success'
+              : s.status === 'Needs Attention'
+              ? 'warning'
+              : 'danger'
+          }
+          size="sm"
+          dot
+        >
+          {s.status}
+        </Badge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Action',
+      align: 'right',
+      accessor: (s) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-xs h-7 px-2.5"
+          onClick={(e) => {
+            e.stopPropagation();
+            setInspectedStudent(s);
+          }}
+        >
+          Diagnostics
+        </Button>
+      ),
+    },
+  ];
+
+  const bulkActions: BulkAction<StudentCohortMember>[] = [
+    {
+      label: 'Export Selected Roster',
+      icon: <Download className="h-4 w-4" />,
+      onClick: handleExportCSV,
+    },
+  ];
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900">Student Management</h1>
-        <div className="flex space-x-3">
-          <button className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
-            <Download className="h-5 w-5 mr-2" />
-            Export
-          </button>
-          <button className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
-            Add Student
-          </button>
+      {/* Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Course Cohort & Student Roster</h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Track individual competency, assessment submissions, and identify candidates needing academic intervention.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<Download className="h-4 w-4" />}
+            onClick={() => handleExportCSV(students)}
+          >
+            Export All (CSV)
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<Plus className="h-4 w-4" />}
+            onClick={() => setIsAddModalOpen(true)}
+          >
+            Enroll Student
+          </Button>
         </div>
       </div>
 
-      <div className="bg-white shadow rounded-lg">
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-4">
-            <div className="flex-1 relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-5 w-5 text-gray-400" />
+      {/* DataTable */}
+      <DataTable
+        data={filteredStudents}
+        columns={columns}
+        keyExtractor={(s) => s.id}
+        searchPlaceholder="Search students by name, roll number, or email..."
+        searchFilter={(s, query) => {
+          const l = query.toLowerCase();
+          return s.name.toLowerCase().includes(l) || s.rollNumber.toLowerCase().includes(l);
+        }}
+        bulkActions={bulkActions}
+        filterSlots={
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-lg border border-slate-300 bg-white py-2 px-3 text-xs font-medium text-slate-700 focus:ring-1 focus:ring-indigo-500"
+          >
+            <option value="All">All Academic Standings</option>
+            <option value="Good Standing">Good Standing</option>
+            <option value="Needs Attention">Needs Attention</option>
+            <option value="At Risk">At Risk</option>
+          </select>
+        }
+        onRowClick={(s) => setInspectedStudent(s)}
+      />
+
+      {/* Add Student Modal */}
+      <Modal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        title="Enroll Student in Cohort"
+        description="Add a candidate to the active course roster for assessment distribution."
+        size="md"
+      >
+        <form onSubmit={handleAddStudent} className="space-y-4">
+          <Input
+            label="Candidate Full Name"
+            placeholder="e.g. Maya Lin"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+
+          <Input
+            label="University Email"
+            type="email"
+            placeholder="e.g. m.lin@student.univ.edu"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+
+          <Input
+            label="Roll / Registration Number"
+            placeholder="e.g. CS2024-055"
+            value={roll}
+            onChange={(e) => setRoll(e.target.value)}
+          />
+
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsAddModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" size="sm">
+              Enroll Student
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Student Diagnostic Drawer */}
+      <Drawer
+        isOpen={Boolean(inspectedStudent)}
+        onClose={() => setInspectedStudent(null)}
+        title={inspectedStudent?.name || 'Student Diagnostics'}
+        description={`Roll No: ${inspectedStudent?.rollNumber} • ${inspectedStudent?.email}`}
+        footer={
+          <div className="flex items-center justify-between w-full">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                alert(`Retake token generated for ${inspectedStudent?.name}`);
+                setInspectedStudent(null);
+              }}
+            >
+              Issue Retake Token
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setInspectedStudent(null)}
+            >
+              Done
+            </Button>
+          </div>
+        }
+      >
+        {inspectedStudent && (
+          <div className="space-y-6 text-xs">
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-900 text-sm">{inspectedStudent.name}</span>
+                <Badge
+                  variant={
+                    inspectedStudent.status === 'Good Standing'
+                      ? 'success'
+                      : inspectedStudent.status === 'Needs Attention'
+                      ? 'warning'
+                      : 'danger'
+                  }
+                  size="sm"
+                >
+                  {inspectedStudent.status}
+                </Badge>
               </div>
-              <input
-                type="text"
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                placeholder="Search students..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+              <p className="text-slate-500">Enrolled Course: CS-301 Database Systems</p>
             </div>
-            <button className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
-              <Filter className="h-5 w-5 mr-2" />
-              Filter
-            </button>
-          </div>
-        </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Student
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Performance
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Attendance
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Last Quiz
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {students.map((student) => (
-                <tr key={student.id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="h-10 w-10 flex-shrink-0">
-                        <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                          <span className="text-sm font-medium text-gray-600">
-                            {student.name.split(' ').map(n => n[0]).join('')}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">{student.name}</div>
-                        <div className="text-sm text-gray-500">{student.email}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="w-full bg-gray-200 rounded-full h-2.5">
-                        <div
-                          className={`h-2.5 rounded-full ${
-                            student.performance >= 90
-                              ? 'bg-green-600'
-                              : student.performance >= 70
-                              ? 'bg-yellow-400'
-                              : 'bg-red-600'
-                          }`}
-                          style={{ width: `${student.performance}%` }}
-                        ></div>
-                      </div>
-                      <span className="ml-2 text-sm text-gray-500">{student.performance}%</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {student.attendance}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {student.lastQuiz}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        student.status === 'active'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}
-                    >
-                      {student.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-700">
-                Showing <span className="font-medium">1</span> to{' '}
-                <span className="font-medium">10</span> of{' '}
-                <span className="font-medium">20</span> results
-              </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg border border-slate-100 bg-white">
+                <span className="text-slate-400">Cumulative Score</span>
+                <p className="font-bold text-slate-900 text-sm mt-0.5">
+                  {inspectedStudent.performance}% (Grade {inspectedStudent.letterGrade})
+                </p>
+              </div>
+              <div className="p-3 rounded-lg border border-slate-100 bg-white">
+                <span className="text-slate-400">Class Attendance</span>
+                <p className="font-bold text-slate-900 text-sm mt-0.5">{inspectedStudent.attendance}</p>
+              </div>
+              <div className="p-3 rounded-lg border border-slate-100 bg-white">
+                <span className="text-slate-400">Quizzes Taken</span>
+                <p className="font-bold text-slate-900 text-sm mt-0.5">
+                  {inspectedStudent.quizzesCompleted} of 6
+                </p>
+              </div>
+              <div className="p-3 rounded-lg border border-slate-100 bg-white">
+                <span className="text-slate-400">Last Assessment Score</span>
+                <p className="font-bold text-slate-900 text-sm mt-0.5">
+                  {inspectedStudent.lastQuizScore}
+                </p>
+              </div>
             </div>
-            <div>
-              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                <button className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
-                  Previous
-                </button>
-                <button className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-                  1
-                </button>
-                <button className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-                  2
-                </button>
-                <button className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
-                  Next
-                </button>
-              </nav>
+
+            <div className="space-y-2">
+              <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
+                Assessment History & Attempts
+              </h4>
+              <div className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+                {[
+                  { title: 'CS-301 Midterm Examination', date: '2 days ago', score: '95%', state: 'Passed' },
+                  { title: 'Normalization & ER Diagram Quiz', date: '1 week ago', score: '88%', state: 'Passed' },
+                  { title: 'SQL Aggregations & Joins Pop Quiz', date: '2 weeks ago', score: '92%', state: 'Passed' },
+                ].map((att, i) => (
+                  <div key={i} className="p-3 flex items-center justify-between bg-white">
+                    <div>
+                      <p className="font-semibold text-slate-900">{att.title}</p>
+                      <p className="text-slate-400 text-[11px]">{att.date}</p>
+                    </div>
+                    <span className="font-bold text-slate-800 tabular-nums">{att.score}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        )}
+      </Drawer>
     </div>
   );
 }

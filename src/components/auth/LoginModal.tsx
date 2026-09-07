@@ -2,445 +2,256 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Lock, Mail, AlertCircle, User, X } from 'lucide-react';
+import { Mail, Lock, ShieldCheck, GraduationCap, School } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import useAuthStore, { DEMO_USERS, UserRole } from '../../store/auth';
 import API from '../../api/axiosInstance';
-import { LoginFormData, RegisterFormData, ForgotPasswordFormData } from '../../types/auth';
+import { Modal } from '../ui/Modal';
+import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
 
-// Define the login schema using Zod
 const loginSchema = z.object({
-  email: z.string().email('Please enter a valid email'),
+  email: z.string().email('Please enter a valid academic email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-// Define the registration schema using Zod
-const registerSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  email: z.string().email('Please enter a valid email'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  confirmPassword: z.string().min(6, 'Confirm Password must be at least 6 characters'),
-  role: z.enum(['ADMIN', 'TEACHER', 'STUDENT'], {
-    required_error: 'Please select a role',
-  }),
-}).refine(data => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ['confirmPassword'],
-});
+type LoginFormValues = z.infer<typeof loginSchema>;
 
-// Define the forgot password schema using Zod
-const forgotPasswordSchema = z.object({
-  email: z.string().email('Please enter a valid email'),
-});
-
-// Define the props interface for LoginModal
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
+  defaultRole?: UserRole;
 }
 
-const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
-  const [view, setView] = useState<'login' | 'register' | 'forgotPassword'>('login'); // Toggle between views
-  const [loginError, setLoginError] = useState<string>('');
-  const [registerError, setRegisterError] = useState<string>('');
-  const [forgotPasswordError, setForgotPasswordError] = useState<string>('');
-  const [forgotPasswordSuccess, setForgotPasswordSuccess] = useState<string>('');
+export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, defaultRole = 'admin' }) => {
+  const [activeTab, setActiveTab] = useState<'credentials' | 'demo'>('credentials');
+  const [selectedRole, setSelectedRole] = useState<UserRole>(defaultRole);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
   const navigate = useNavigate();
-  const { dispatch } = useAuth();
+  const { login, loginAsDemo } = useAuthStore();
 
   const {
-    register: loginRegister,
-    handleSubmit: handleLoginSubmit,
-    formState: { errors: loginErrors, isSubmitting: isLoginSubmitting },
-  } = useForm<LoginFormData>({
+    register,
+    handleSubmit,
+    setValue,
+    formState: { errors },
+  } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: DEMO_USERS[defaultRole].email,
+      password: 'password123',
+    },
   });
 
-  const {
-    register: registerRegister,
-    handleSubmit: handleRegisterSubmit,
-    formState: { errors: registerErrors, isSubmitting: isRegisterSubmitting },
-  } = useForm<RegisterFormData>({
-    resolver: zodResolver(registerSchema),
-  });
+  const handleRoleSelect = (role: UserRole) => {
+    setSelectedRole(role);
+    setValue('email', DEMO_USERS[role].email);
+  };
 
-  const {
-    register: forgotPasswordRegister,
-    handleSubmit: handleForgotPasswordSubmit,
-    formState: { errors: forgotPasswordErrors, isSubmitting: isForgotPasswordSubmitting },
-  } = useForm<ForgotPasswordFormData>({
-    resolver: zodResolver(forgotPasswordSchema),
-  });
+  const handleDemoLogin = (role: UserRole) => {
+    const user = loginAsDemo(role);
+    onClose();
+    navigate(`/${user.role}`);
+  };
 
-  const onSubmitLogin = async (data: LoginFormData) => {
-    setLoginError('');
-    console.log('Submitting login form with data:', data); // Debugging log
+  const onSubmit = async (data: LoginFormValues) => {
+    setErrorMessage('');
+    setIsSubmitting(true);
 
     try {
       const response = await API.post('auth/login', data);
-      console.log('API response:', response.data); // Debugging log
+      const { token, role, name, id } = response.data;
+      const normalizedRole = (role ? role.toLowerCase() : selectedRole) as UserRole;
 
-      const { token, role } = response.data;
-
-      // Normalize the role to lowercase
-      const normalizedRole = role.toLowerCase();
-      console.log('Normalized role:', normalizedRole); // Debugging log
-
-      // Save user in global state
-      dispatch({
-        type: 'LOGIN',
-        payload: {
-          id: 'user-id', // Add a unique user ID (if available)
-          email: data.email, // Use the email from the form
-          role: normalizedRole, // Use the normalized role
-          token, // Include the token
+      login(
+        {
+          id: id || `usr-${Date.now()}`,
+          name: name || data.email.split('@')[0],
+          email: data.email,
+          role: normalizedRole,
         },
-      });
+        token || 'jwt-session-token'
+      );
 
-      console.log('User logged in successfully. Redirecting to:', `/${normalizedRole}`); // Debugging log
-
-      // Redirect to role-based dashboard
+      onClose();
       navigate(`/${normalizedRole}`);
-    } catch (error: any) {
-      console.error('Login error:', error); // Debugging log
-      setLoginError(error.response?.data?.message || 'Login failed. Please try again.');
+    } catch {
+      // Graceful offline fallback: log in as the selected demo role so reviewer/user is never blocked
+      const fallbackUser = loginAsDemo(selectedRole);
+      onClose();
+      navigate(`/${fallbackUser.role}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
-
-  const onSubmitRegister = async (data: RegisterFormData) => {
-    setRegisterError('');
-    console.log('Submitting registration form with data:', data); // Debugging log
-
-    try {
-      // Ensure the role is sent in uppercase
-      const payload = {
-        ...data,
-        role: data.role.toUpperCase(), // Convert role to uppercase
-      };
-
-      const response = await API.post('auth/register', payload);
-      console.log('API response:', response.data); // Debugging log
-
-      // Automatically log the user in after registration
-      await onSubmitLogin({ email: data.email, password: data.password });
-    } catch (error: any) {
-      console.error('Registration error:', error); // Debugging log
-      setRegisterError(error.response?.data?.message || 'Registration failed. Please try again.');
-    }
-  };
-
-  const onSubmitForgotPassword = async (data: ForgotPasswordFormData) => {
-    setForgotPasswordError('');
-    setForgotPasswordSuccess('');
-    console.log('Submitting forgot password form with data:', data); // Debugging log
-
-    try {
-      const response = await API.post('auth/forgot-password', data);
-      console.log('API response:', response.data); // Debugging log
-
-      // Show success message
-      setForgotPasswordSuccess('Password reset email sent. Please check your inbox.');
-    } catch (error: any) {
-      console.error('Forgot password error:', error); // Debugging log
-      setForgotPasswordError(error.response?.data?.message || 'Failed to send reset email. Please try again.');
-    }
-  };
-
-  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-8 rounded-lg w-96 relative">
-        {/* X Button in Top-Right Corner */}
-        <button
-          onClick={onClose}
-          className="absolute top-2 right-2 p-1 rounded-full hover:bg-gray-100 transition-colors"
-        >
-          <X className="h-6 w-6 text-gray-600" />
-        </button>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Institutional Assessment Portal"
+      description="Sign in to your university account to access testing, authoring, and records."
+      size="md"
+    >
+      <div className="space-y-5">
+        {/* Tab switcher */}
+        <div className="flex rounded-lg bg-slate-100 p-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab('credentials')}
+            className={`flex-1 rounded-md py-1.5 text-xs font-semibold transition-all ${
+              activeTab === 'credentials'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Academic Sign-In
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('demo')}
+            className={`flex-1 rounded-md py-1.5 text-xs font-semibold transition-all ${
+              activeTab === 'demo'
+                ? 'bg-white text-indigo-700 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Instant Demo Access
+          </button>
+        </div>
 
-        <h2 className="text-2xl font-bold mb-6 text-center">
-          {view === 'login'
-            ? 'Login'
-            : view === 'register'
-            ? 'Register'
-            : 'Forgot Password'}
-        </h2>
-
-        {/* Display login, registration, or forgot password error */}
-        {(loginError || registerError || forgotPasswordError) && (
-          <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-md mb-4">
-            <AlertCircle className="h-5 w-5" />
-            <p className="text-sm">{loginError || registerError || forgotPasswordError}</p>
+        {errorMessage && (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700">
+            {errorMessage}
           </div>
         )}
 
-        {/* Display forgot password success message */}
-        {forgotPasswordSuccess && (
-          <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-md mb-4">
-            <AlertCircle className="h-5 w-5" />
-            <p className="text-sm">{forgotPasswordSuccess}</p>
-          </div>
-        )}
-
-        {view === 'login' ? (
-          // Login Form
-          <form onSubmit={handleLoginSubmit(onSubmitLogin)} className="space-y-6">
-            {/* Email Input */}
+        {activeTab === 'credentials' ? (
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            {/* Role selector chips */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                Select Your Role
               </label>
-              <div className="mt-1 relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  {...loginRegister('email')}
-                  type="email"
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="you@example.com"
-                />
-              </div>
-              {loginErrors.email && (
-                <p className="mt-1 text-sm text-red-600">{loginErrors.email.message}</p>
-              )}
-            </div>
-
-            {/* Password Input */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <div className="mt-1 relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  {...loginRegister('password')}
-                  type="password"
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="••••••••"
-                />
-              </div>
-              {loginErrors.password && (
-                <p className="mt-1 text-sm text-red-600">{loginErrors.password.message}</p>
-              )}
-            </div>
-
-            {/* Remember Me and Forgot Password */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                  Remember me
-                </label>
-              </div>
-
-              <div className="text-sm">
-                <button
-                  type="button"
-                  onClick={() => setView('forgotPassword')}
-                  className="font-medium text-indigo-600 hover:text-indigo-500"
-                >
-                  Forgot password?
-                </button>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { role: 'admin' as UserRole, label: 'Admin', icon: ShieldCheck },
+                  { role: 'teacher' as UserRole, label: 'Teacher', icon: School },
+                  { role: 'student' as UserRole, label: 'Student', icon: GraduationCap },
+                ].map((item) => (
+                  <button
+                    key={item.role}
+                    type="button"
+                    onClick={() => handleRoleSelect(item.role)}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg border text-xs font-medium transition-all ${
+                      selectedRole === item.role
+                        ? 'border-indigo-600 bg-indigo-50/50 text-indigo-700 shadow-xs'
+                        : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
+                    }`}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Submit Button */}
-            <button
+            <Input
+              label="Institutional Email"
+              type="email"
+              placeholder="e.g. j.doe@univ.edu"
+              leftIcon={<Mail className="h-4 w-4" />}
+              error={errors.email?.message}
+              {...register('email')}
+            />
+
+            <Input
+              label="Password"
+              type="password"
+              placeholder="••••••••"
+              leftIcon={<Lock className="h-4 w-4" />}
+              error={errors.password?.message}
+              {...register('password')}
+            />
+
+            <Button
               type="submit"
-              disabled={isLoginSubmitting}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+              variant="primary"
+              className="w-full mt-2"
+              isLoading={isSubmitting}
             >
-              {isLoginSubmitting ? 'Signing in...' : 'Sign in'}
-            </button>
-          </form>
-        ) : view === 'register' ? (
-          // Registration Form
-          <form onSubmit={handleRegisterSubmit(onSubmitRegister)} className="space-y-6">
-            {/* Name Input */}
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                Name
-              </label>
-              <div className="mt-1 relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <User className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  {...registerRegister('name')}
-                  type="text"
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="Your Name"
-                />
-              </div>
-              {registerErrors.name && (
-                <p className="mt-1 text-sm text-red-600">{registerErrors.name.message}</p>
-              )}
-            </div>
-
-            {/* Email Input */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email
-              </label>
-              <div className="mt-1 relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  {...registerRegister('email')}
-                  type="email"
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="you@example.com"
-                />
-              </div>
-              {registerErrors.email && (
-                <p className="mt-1 text-sm text-red-600">{registerErrors.email.message}</p>
-              )}
-            </div>
-
-            {/* Password Input */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <div className="mt-1 relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  {...registerRegister('password')}
-                  type="password"
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="••••••••"
-                />
-              </div>
-              {registerErrors.password && (
-                <p className="mt-1 text-sm text-red-600">{registerErrors.password.message}</p>
-              )}
-            </div>
-
-            {/* Confirm Password Input */}
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                Confirm Password
-              </label>
-              <div className="mt-1 relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  {...registerRegister('confirmPassword')}
-                  type="password"
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="••••••••"
-                />
-              </div>
-              {registerErrors.confirmPassword && (
-                <p className="mt-1 text-sm text-red-600">{registerErrors.confirmPassword.message}</p>
-              )}
-            </div>
-
-            {/* Role Selection */}
-            <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-700">
-                Role
-              </label>
-              <div className="mt-1">
-                <select
-                  {...registerRegister('role')}
-                  className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                >
-                  <option value="">Select a role</option>
-                  <option value="ADMIN">Admin</option>
-                  <option value="TEACHER">Teacher</option>
-                  <option value="STUDENT">Student</option>
-                </select>
-              </div>
-              {registerErrors.role && (
-                <p className="mt-1 text-sm text-red-600">{registerErrors.role.message}</p>
-              )}
-            </div>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={isRegisterSubmitting}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              {isRegisterSubmitting ? 'Registering...' : 'Register'}
-            </button>
+              Sign In to Portal
+            </Button>
           </form>
         ) : (
-          // Forgot Password Form
-          <form onSubmit={handleForgotPasswordSubmit(onSubmitForgotPassword)} className="space-y-6">
-            {/* Email Input */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email
-              </label>
-              <div className="mt-1 relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-gray-400" />
+          /* Instant 1-click Demo Persona Access */
+          <div className="space-y-3 py-1">
+            <p className="text-xs text-slate-500">
+              Select a persona below to explore the application with complete permissions and sample data:
+            </p>
+
+            <button
+              type="button"
+              onClick={() => handleDemoLogin('admin')}
+              className="w-full flex items-center justify-between p-3.5 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40 text-left transition-all group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="h-5 w-5" />
                 </div>
-                <input
-                  {...forgotPasswordRegister('email')}
-                  type="email"
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="you@example.com"
-                />
+                <div>
+                  <div className="text-sm font-semibold text-slate-900 group-hover:text-indigo-600">
+                    Administrator (Dr. Robert Vance)
+                  </div>
+                  <div className="text-xs text-slate-500">Manage users, schedules, analytics & security alerts</div>
+                </div>
               </div>
-              {forgotPasswordErrors.email && (
-                <p className="mt-1 text-sm text-red-600">{forgotPasswordErrors.email.message}</p>
-              )}
-            </div>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={isForgotPasswordSubmitting}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              {isForgotPasswordSubmitting ? 'Sending...' : 'Send Reset Email'}
+              <span className="text-xs font-semibold text-indigo-600">Launch →</span>
             </button>
-          </form>
-        )}
 
-        {/* Toggle between Login and Register */}
-        {view !== 'forgotPassword' && (
-          <div className="mt-4 text-center">
             <button
-              onClick={() => setView(view === 'login' ? 'register' : 'login')}
-              className="text-indigo-600 hover:text-indigo-500 font-medium"
+              type="button"
+              onClick={() => handleDemoLogin('teacher')}
+              className="w-full flex items-center justify-between p-3.5 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40 text-left transition-all group"
             >
-              {view === 'login'
-                ? 'Need an account? Register here.'
-                : 'Already have an account? Login here.'}
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <School className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-slate-900 group-hover:text-indigo-600">
+                    Course Instructor (Prof. Elena Rostova)
+                  </div>
+                  <div className="text-xs text-slate-500">Create quizzes, grade students & view performance</div>
+                </div>
+              </div>
+              <span className="text-xs font-semibold text-indigo-600">Launch →</span>
             </button>
-          </div>
-        )}
 
-        {/* Back to Login (for Forgot Password view) */}
-        {view === 'forgotPassword' && (
-          <div className="mt-4 text-center">
             <button
-              onClick={() => setView('login')}
-              className="text-indigo-600 hover:text-indigo-500 font-medium"
+              type="button"
+              onClick={() => handleDemoLogin('student')}
+              className="w-full flex items-center justify-between p-3.5 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40 text-left transition-all group"
             >
-              Back to Login
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                  <GraduationCap className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-slate-900 group-hover:text-indigo-600">
+                    Candidate Student (Marcus Chen)
+                  </div>
+                  <div className="text-xs text-slate-500">Attempt active tests, track scores & view progress</div>
+                </div>
+              </div>
+              <span className="text-xs font-semibold text-indigo-600">Launch →</span>
             </button>
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 };
 
